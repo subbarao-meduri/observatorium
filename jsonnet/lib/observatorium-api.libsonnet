@@ -88,6 +88,11 @@ local k = import 'ksonnet/ksonnet.beta.4/k.libsonnet';
           ]
         else []
       ) + (
+        if std.objectHas(api.config.metrics, 'additionalWriteEndpoint') then [
+          '--metrics.additional.write.endpoint=' + api.config.metrics.additionalWriteEndpoint,
+        ]
+        else []
+      ) + (
         if api.config.rbac != {} then
           ['--rbac.config=/etc/observatorium/rbac.yaml']
         else []
