@@ -38,6 +38,7 @@ import (
 	metricsv1 "github.com/observatorium/observatorium/internal/api/metrics/v1"
 	"github.com/observatorium/observatorium/internal/authentication"
 	"github.com/observatorium/observatorium/internal/authorization"
+	"github.com/observatorium/observatorium/internal/export"
 	"github.com/observatorium/observatorium/internal/server"
 	"github.com/observatorium/observatorium/internal/tls"
 	"github.com/observatorium/observatorium/rbac"
@@ -82,9 +83,10 @@ type tlsConfig struct {
 }
 
 type metricsConfig struct {
-	readEndpoint  *url.URL
-	writeEndpoint *url.URL
-	tenantHeader  string
+	readEndpoint            *url.URL
+	writeEndpoint           *url.URL
+	additionalWriteEndpoint *url.URL
+	tenantHeader            string
 }
 
 type logsConfig struct {
@@ -353,19 +355,37 @@ func main() {
 					),
 				)
 
-				r.Mount("/api/metrics/v1/{tenant}",
-					stripTenantPrefix("/api/metrics/v1",
-						metricsv1.NewHandler(
-							cfg.metrics.readEndpoint,
-							cfg.metrics.writeEndpoint,
-							metricsv1.Logger(logger),
-							metricsv1.Registry(reg),
-							metricsv1.HandlerInstrumenter(ins),
-							metricsv1.ReadMiddleware(authorization.WithAuthorizer(authorizer, rbac.Read, "metrics")),
-							metricsv1.WriteMiddleware(authorization.WithAuthorizer(authorizer, rbac.Write, "metrics")),
+				if cfg.metrics.additionalWriteEndpoint != nil {
+					r.Mount("/api/metrics/v1/{tenant}",
+						stripTenantPrefix("/api/metrics/v1",
+							metricsv1.NewHandler(
+								cfg.metrics.readEndpoint,
+								cfg.metrics.writeEndpoint,
+								metricsv1.Logger(logger),
+								metricsv1.Registry(reg),
+								metricsv1.HandlerInstrumenter(ins),
+								metricsv1.ReadMiddleware(authorization.WithAuthorizer(authorizer, rbac.Read, "metrics")),
+								metricsv1.WriteMiddleware(authorization.WithAuthorizer(authorizer, rbac.Write, "metrics")),
+								metricsv1.WriteMiddleware(export.WithExport(cfg.metrics.additionalWriteEndpoint)),
+							),
 						),
-					),
-				)
+					)
+				} else {
+					r.Mount("/api/metrics/v1/{tenant}",
+						stripTenantPrefix("/api/metrics/v1",
+							metricsv1.NewHandler(
+								cfg.metrics.readEndpoint,
+								cfg.metrics.writeEndpoint,
+								metricsv1.Logger(logger),
+								metricsv1.Registry(reg),
+								metricsv1.HandlerInstrumenter(ins),
+								metricsv1.ReadMiddleware(authorization.WithAuthorizer(authorizer, rbac.Read, "metrics")),
+								metricsv1.WriteMiddleware(authorization.WithAuthorizer(authorizer, rbac.Write, "metrics")),
+							),
+						),
+					)
+				}
+
 			})
 
 			// Logs
@@ -479,12 +499,13 @@ func main() {
 
 func parseFlags() (config, error) {
 	var (
-		rawTLSCipherSuites      string
-		rawMetricsReadEndpoint  string
-		rawMetricsWriteEndpoint string
-		rawLogsReadEndpoint     string
-		rawLogsTailEndpoint     string
-		rawLogsWriteEndpoint    string
+		rawTLSCipherSuites                string
+		rawMetricsReadEndpoint            string
+		rawMetricsWriteEndpoint           string
+		rawAdditionalMetricsWriteEndpoint string
+		rawLogsReadEndpoint               string
+		rawLogsTailEndpoint               string
+		rawLogsWriteEndpoint              string
 	)
 
 	cfg := config{}
@@ -521,6 +542,8 @@ func parseFlags() (config, error) {
 		"The endpoint against which to send read requests for metrics. It used as a fallback to 'query.endpoint' and 'query-range.endpoint'.")
 	flag.StringVar(&rawMetricsWriteEndpoint, "metrics.write.endpoint", "",
 		"The endpoint against which to make write requests for metrics.")
+	flag.StringVar(&rawAdditionalMetricsWriteEndpoint, "metrics.additional.write.endpoint", "",
+		"The additional endpoint against which to make write requests for metrics besides the one write to thanos.")
 	flag.StringVar(&cfg.metrics.tenantHeader, "metrics.tenant-header", "THANOS-TENANT",
 		"The name of the HTTP header containing the tenant ID to forward to the metrics upstreams.")
 	flag.StringVar(&cfg.tls.serverCertFile, "tls.server.cert-file", "",
@@ -557,6 +580,14 @@ func parseFlags() (config, error) {
 	}
 
 	cfg.metrics.writeEndpoint = metricsWriteEndpoint
+
+	if rawAdditionalMetricsWriteEndpoint != "" {
+		additionalMetricsWriteEndpoint, err := url.ParseRequestURI(rawAdditionalMetricsWriteEndpoint)
+		if err != nil {
+			return cfg, fmt.Errorf("--metrics.additional.write.endpoint is invalid, raw %s: %w", rawAdditionalMetricsWriteEndpoint, err)
+		}
+		cfg.metrics.additionalWriteEndpoint = additionalMetricsWriteEndpoint
+	}
 
 	if rawLogsReadEndpoint != "" {
 		cfg.logs.enabled = true
