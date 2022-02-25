@@ -38,7 +38,7 @@ import (
 	metricsv1 "github.com/observatorium/observatorium/internal/api/metrics/v1"
 	"github.com/observatorium/observatorium/internal/authentication"
 	"github.com/observatorium/observatorium/internal/authorization"
-	"github.com/observatorium/observatorium/internal/export"
+	"github.com/observatorium/observatorium/internal/remotewrite"
 	"github.com/observatorium/observatorium/internal/server"
 	"github.com/observatorium/observatorium/internal/tls"
 	"github.com/observatorium/observatorium/rbac"
@@ -85,7 +85,7 @@ type tlsConfig struct {
 type metricsConfig struct {
 	readEndpoint             *url.URL
 	writeEndpoint            *url.URL
-	additionalWriteEndpoints *export.Endpoints
+	additionalWriteEndpoints *remotewrite.Endpoints
 	tenantHeader             string
 }
 
@@ -355,36 +355,20 @@ func main() {
 					),
 				)
 
-				if cfg.metrics.additionalWriteEndpoints != nil {
-					r.Mount("/api/metrics/v1/{tenant}",
-						stripTenantPrefix("/api/metrics/v1",
-							metricsv1.NewHandler(
-								cfg.metrics.readEndpoint,
-								cfg.metrics.writeEndpoint,
-								metricsv1.Logger(logger),
-								metricsv1.Registry(reg),
-								metricsv1.HandlerInstrumenter(ins),
-								metricsv1.ReadMiddleware(authorization.WithAuthorizer(authorizer, rbac.Read, "metrics")),
-								metricsv1.WriteMiddleware(authorization.WithAuthorizer(authorizer, rbac.Write, "metrics")),
-								metricsv1.WriteMiddleware(export.WithExport(*cfg.metrics.additionalWriteEndpoints)),
-							),
+				r.Mount("/api/metrics/v1/{tenant}",
+					stripTenantPrefix("/api/metrics/v1",
+						metricsv1.NewHandler(
+							cfg.metrics.readEndpoint,
+							cfg.metrics.writeEndpoint,
+							metricsv1.Logger(logger),
+							metricsv1.Registry(reg),
+							metricsv1.HandlerInstrumenter(ins),
+							metricsv1.ReadMiddleware(authorization.WithAuthorizer(authorizer, rbac.Read, "metrics")),
+							metricsv1.WriteMiddleware(authorization.WithAuthorizer(authorizer, rbac.Write, "metrics")),
+							metricsv1.RemoteWriteEndpoints(cfg.metrics.additionalWriteEndpoints),
 						),
-					)
-				} else {
-					r.Mount("/api/metrics/v1/{tenant}",
-						stripTenantPrefix("/api/metrics/v1",
-							metricsv1.NewHandler(
-								cfg.metrics.readEndpoint,
-								cfg.metrics.writeEndpoint,
-								metricsv1.Logger(logger),
-								metricsv1.Registry(reg),
-								metricsv1.HandlerInstrumenter(ins),
-								metricsv1.ReadMiddleware(authorization.WithAuthorizer(authorizer, rbac.Read, "metrics")),
-								metricsv1.WriteMiddleware(authorization.WithAuthorizer(authorizer, rbac.Write, "metrics")),
-							),
-						),
-					)
-				}
+					),
+				)
 
 			})
 
@@ -586,7 +570,7 @@ func parseFlags() (config, error) {
 		if err != nil {
 			return cfg, fmt.Errorf("Failed to read additional write endpoint config file %s: %w", additionalMetricsWriteEndpointCfg, err)
 		}
-		endpoints := &export.Endpoints{}
+		endpoints := &remotewrite.Endpoints{}
 		err = yaml.Unmarshal(cfgFile, endpoints)
 		if err != nil {
 			return cfg, fmt.Errorf("Invalid content in additional write endpoint config file %s: %v", additionalMetricsWriteEndpointCfg, err)
