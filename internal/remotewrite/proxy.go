@@ -21,12 +21,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+const (
+	THANOS_ENDPOINT_NAME = "thanos-receiver"
+)
+
 type Endpoints struct {
 	Endpoints []Endpoint `yaml:"endpoints"`
 }
 
 type Endpoint struct {
-	URL string `yaml:"url"`
+	Name string `yaml:"name"`
+	URL  string `yaml:"url"`
 	// +optional
 	TlsConfig *TlsConfig `yaml:"tlsConfig,omitempty"`
 	// +optional
@@ -55,7 +60,8 @@ func Proxy(write *url.URL, endpoints *Endpoints, logger log.Logger, r *prometheu
 
 	if write != nil {
 		endpoints.Endpoints = append(endpoints.Endpoints, Endpoint{
-			URL: write.String(),
+			URL:  write.String(),
+			Name: THANOS_ENDPOINT_NAME,
 		})
 	}
 
@@ -63,7 +69,7 @@ func Proxy(write *url.URL, endpoints *Endpoints, logger log.Logger, r *prometheu
 		Name:        "remote_write_requests_total",
 		Help:        "Counter of remote write requests.",
 		ConstLabels: prometheus.Labels{"proxy": "metricsv1-remotewrite"},
-	}, []string{"code"})
+	}, []string{"code", "name"})
 	r.MustRegister(remotewriteRequests)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -106,23 +112,24 @@ func Proxy(write *url.URL, endpoints *Endpoints, logger log.Logger, r *prometheu
 					authHeader := fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(auth)))
 					req.Header.Add("Authorization", authHeader)
 				}
+				ep := endpoint
 				go func() {
 					resp, err := client.Do(req)
 					if err != nil {
-						remotewriteRequests.With(prometheus.Labels{"code": "<error>"}).Inc()
+						remotewriteRequests.With(prometheus.Labels{"code": "<error>", "name": ep.Name}).Inc()
 						level.Error(rlogger).Log("msg", "Failed to send request to the server", "err", err)
 					} else {
 						defer resp.Body.Close()
-						remotewriteRequests.With(prometheus.Labels{"code": strconv.Itoa(resp.StatusCode)}).Inc()
+						remotewriteRequests.With(prometheus.Labels{"code": strconv.Itoa(resp.StatusCode), "name": ep.Name}).Inc()
 						if resp.StatusCode >= 300 || resp.StatusCode < 200 {
 							responseBody, err := ioutil.ReadAll(resp.Body)
 							if err != nil {
-								level.Error(rlogger).Log("msg", "Failed to read response of the forward request", "err", err, "return code", resp.Status, "url", req.URL)
+								level.Error(rlogger).Log("msg", "Failed to read response of the forward request", "err", err, "return code", resp.Status, "url", ep.URL)
 							} else {
-								level.Error(rlogger).Log("msg", "Failed to forward metrics", "return code", resp.Status, "response", string(responseBody), "url", req.URL)
+								level.Error(rlogger).Log("msg", "Failed to forward metrics", "return code", resp.Status, "response", string(responseBody), "url", ep.URL)
 							}
 						} else {
-							level.Debug(rlogger).Log("msg", "Metrics forwarded successfully", "url", req.URL)
+							level.Debug(rlogger).Log("msg", "Metrics forwarded successfully", "url", ep.URL)
 						}
 					}
 				}()

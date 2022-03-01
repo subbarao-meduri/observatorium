@@ -379,6 +379,7 @@ function(params) {
   local e = {
     "endpoints": [
         {
+          name: endpoint.name,
           url: endpoint.url,
         } + 
         (if std.objectHas(endpoint, 'tlsConfig') then {
