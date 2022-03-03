@@ -25,7 +25,6 @@ local defaults = {
   tls: {},
   rateLimiter: {},
   internal: {},
-  additionalWriteEndpoints: [],
 
   commonLabels:: {
     'app.kubernetes.io/name': 'observatorium-api',
@@ -279,17 +278,16 @@ function(params) {
                        subPath: 'endpoints.yaml',
                        readOnly: true,
                      },
-                   ] else []
-                 ) + (
-                   if std.objectHas(api.config, 'additionalWriteEndpoints') then [
-                     {
-                       name: endpoint.tlsConfig.secretName,
-                       mountPath: '/var/run/certs/' + endpoint.tlsConfig.secretName,
-                       readOnly: true,
-                     }
-                     for endpoint in api.config.additionalWriteEndpoints
-                     if std.objectHas(endpoint, 'tlsConfig')
-                   ] else []
+                   ] + (
+                    if std.objectHas(api.config.additionalWriteEndpoints, 'mountSecrets') then [
+                      {
+                        name: name,
+                        mountPath: '/var/run/secrets/' + name,
+                        readOnly: true,
+                      }
+                      for name in api.config.additionalWriteEndpoints.mountSecrets
+                    ] else [])
+                   else []
                  ),
             },
           ],
@@ -356,62 +354,25 @@ function(params) {
             (if std.objectHas(api.config, 'additionalWriteEndpoints') then [
                {
                  secret: {
-                   secretName: api.config.name + '-endpoint',
+                   secretName: api.config.additionalWriteEndpoints.endpointsConfigSecret,
                  },
                  name: 'endpoint-config',
                },
-             ] else []) +
-            (if std.objectHas(api.config, 'additionalWriteEndpoints') then [
-               {
-                 secret: {
-                   secretName: endpoint.tlsConfig.secretName,
-                 },
-                 name: endpoint.tlsConfig.secretName,
-               }
-               for endpoint in api.config.additionalWriteEndpoints
-               if std.objectHas(endpoint, 'tlsConfig')
-             ] else []),
+             ] +
+              (if std.objectHas(api.config.additionalWriteEndpoints, 'mountSecrets') then [
+                {
+                  secret: {
+                    secretName: name,
+                  },
+                  name: name,
+                }
+                for name in api.config.additionalWriteEndpoints.mountSecrets
+              ] else [])
+             else []),
         },
       },
     },
   },
-
-  local e = {
-    "endpoints": [
-        {
-          name: endpoint.name,
-          url: endpoint.url,
-        } + 
-        (if std.objectHas(endpoint, 'tlsConfig') then {
-          tlsConfig: {
-            ca: '/var/run/certs/' + endpoint.tlsConfig.secretName + '/' + endpoint.tlsConfig.caKey,
-            cert: '/var/run/certs/' + endpoint.tlsConfig.secretName + '/' + endpoint.tlsConfig.certKey,
-            key: '/var/run/certs/' + endpoint.tlsConfig.secretName + '/' + endpoint.tlsConfig.keyKey,
-          },
-        } else {}) + 
-        (if std.objectHas(endpoint, 'basicAuth') then {
-          'basicAuth': {
-            'user': endpoint.basicAuth.user,
-            'password': endpoint.basicAuth.password,
-          },
-        } else {})
-        for endpoint in api.config.additionalWriteEndpoints 
-      ]
-  },
-
-  endpoint_configmap: if std.objectHas(api.config, 'additionalWriteEndpoints') then {
-    apiVersion: 'v1',
-    kind: 'Secret',
-    metadata: {
-      labels: api.config.commonLabels,
-      name: api.config.name + '-endpoint',
-      namespace: api.config.namespace,
-    },
-    stringData: {
-      'endpoints.yaml': std.manifestYamlDoc(e),
-    },
-    type: 'Opaque',
-  } else null,
 
   configmap: if std.length(api.config.rbac) != 0 then {
     apiVersion: 'v1',
