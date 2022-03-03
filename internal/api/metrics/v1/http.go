@@ -26,7 +26,7 @@ type handlerConfiguration struct {
 	instrument       handlerInstrumenter
 	readMiddlewares  []func(http.Handler) http.Handler
 	writeMiddlewares []func(http.Handler) http.Handler
-	endpoints        *remotewrite.Endpoints
+	endpoints        []remotewrite.Endpoint
 }
 
 // HandlerOption modifies the handler's configuration
@@ -47,7 +47,7 @@ func Registry(r *prometheus.Registry) HandlerOption {
 }
 
 // RemoteWriteEndpoints adds the remote write endpoint list for the handler to use.
-func RemoteWriteEndpoints(e *remotewrite.Endpoints) HandlerOption {
+func RemoteWriteEndpoints(e []remotewrite.Endpoint) HandlerOption {
 	return func(h *handlerConfiguration) {
 		h.endpoints = e
 	}

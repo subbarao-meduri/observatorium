@@ -31,6 +31,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/version"
 	"go.uber.org/automaxprocs/maxprocs"
+	yamlv2 "gopkg.in/yaml.v2"
 
 	"github.com/observatorium/observatorium/internal"
 	logsv1 "github.com/observatorium/observatorium/internal/api/logs/v1"
@@ -85,7 +86,7 @@ type tlsConfig struct {
 type metricsConfig struct {
 	readEndpoint             *url.URL
 	writeEndpoint            *url.URL
-	additionalWriteEndpoints *remotewrite.Endpoints
+	additionalWriteEndpoints []remotewrite.Endpoint
 	tenantHeader             string
 }
 
@@ -570,8 +571,8 @@ func parseFlags() (config, error) {
 		if err != nil {
 			return cfg, fmt.Errorf("Failed to read additional write endpoint config file %s: %w", additionalMetricsWriteEndpointCfg, err)
 		}
-		endpoints := &remotewrite.Endpoints{}
-		err = yaml.Unmarshal(cfgFile, endpoints)
+		endpoints := []remotewrite.Endpoint{}
+		err = yamlv2.Unmarshal(cfgFile, &endpoints)
 		if err != nil {
 			return cfg, fmt.Errorf("Invalid content in additional write endpoint config file %s: %v", additionalMetricsWriteEndpointCfg, err)
 		}
