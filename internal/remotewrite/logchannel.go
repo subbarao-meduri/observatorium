@@ -11,14 +11,13 @@ import (
 )
 
 const (
-	successWrite = "Metrics forwarded successfully"
+	successWrite = "metrics forwarded successfully"
 )
 
 var (
 	logMaxCount = int64(10)
 	logInterval = 600 * time.Second
 
-	rlogger     log.Logger
 	LogChannels = []chan logMessage{}
 )
 
@@ -28,11 +27,16 @@ type logMessage struct {
 }
 
 type logCounter struct {
-	logKey        string
+	// key for one log event
+	logKey string
+	// timestamps for last several log event
 	LogTimestamps []time.Time
-	logStartTime  *time.Time
-	logNumber     int64
-	reducedLog    bool
+	// start timestamp of one log interval
+	logStartTime *time.Time
+	// number of log events in one log interval
+	logNumber int64
+	// flag for whether reduce the log
+	reducedLog bool
 }
 
 func revertCounter(counter *logCounter) {
@@ -43,7 +47,6 @@ func revertCounter(counter *logCounter) {
 }
 
 func InitChannels(logger log.Logger, size int) {
-	rlogger = logger
 	if os.Getenv("LOG_MAX_COUNT") != "" {
 		v, err := strconv.ParseInt(os.Getenv("LOG_MAX_COUNT"), 10, 0)
 		if err != nil {
@@ -71,7 +74,7 @@ func InitChannels(logger log.Logger, size int) {
 					if message.messageKey == successWrite {
 						revertCounter(counter)
 					} else {
-						checkLog(counter, message.messageKey, message.keyvals...)
+						checkLog(logger, counter, message.messageKey, message.keyvals...)
 					}
 				case <-time.After(logInterval):
 					revertCounter(counter)
@@ -81,23 +84,28 @@ func InitChannels(logger log.Logger, size int) {
 	}
 }
 
-func checkLog(counter *logCounter, key string, keyvals ...interface{}) {
+// checkLog checks the log events and log them
+// if same log event occurs logMaxCount times within logInterval, start reduce log for this log event
+func checkLog(logger log.Logger, counter *logCounter, key string, keyvals ...interface{}) {
+	// got different log event, start to count from zero
 	if key != counter.logKey {
 		counter.logKey = key
 		counter.LogTimestamps = []time.Time{time.Now()}
 		counter.reducedLog = false
-		level.Error(rlogger).Log(keyvals...)
+		level.Error(logger).Log(keyvals...)
+		return
 	}
 	if counter.reducedLog {
 		if time.Since(*counter.logStartTime) >= logInterval {
+			// log the summary info in last interval
 			message := fmt.Sprintf("Error occurred %d times in last %d seconds: %s",
 				counter.logNumber, int(time.Since(*counter.logStartTime).Seconds()), key)
 			keyvals[1] = message
-			level.Error(rlogger).Log(keyvals...)
-			if counter.logNumber < logMaxCount {
+			level.Error(logger).Log(keyvals...)
+			if counter.logNumber < logMaxCount { // if same log events number less than c, stop reduce log
 				counter.reducedLog = false
 				counter.LogTimestamps = []time.Time{}
-			} else {
+			} else { // start to count log event number in a new interval
 				counter.logNumber = 0
 				now := time.Now()
 				counter.logStartTime = &now
@@ -107,6 +115,7 @@ func checkLog(counter *logCounter, key string, keyvals ...interface{}) {
 		}
 	} else {
 		if int64(len(counter.LogTimestamps)) == logMaxCount {
+			// if same log events number equals to logMaxCount within logInterval, start to reduce log
 			if time.Since(counter.LogTimestamps[0]) <= logInterval {
 				counter.reducedLog = true
 				counter.LogTimestamps = []time.Time{}
@@ -117,11 +126,11 @@ func checkLog(counter *logCounter, key string, keyvals ...interface{}) {
 				counter.LogTimestamps[0] = time.Time{}
 				counter.LogTimestamps = counter.LogTimestamps[1:]
 				counter.LogTimestamps = append(counter.LogTimestamps, time.Now())
-				level.Error(rlogger).Log(keyvals...)
+				level.Error(logger).Log(keyvals...)
 			}
 		} else {
 			counter.LogTimestamps = append(counter.LogTimestamps, time.Now())
-			level.Error(rlogger).Log(keyvals...)
+			level.Error(logger).Log(keyvals...)
 		}
 	}
 }
