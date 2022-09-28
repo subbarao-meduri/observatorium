@@ -20,7 +20,7 @@ require (
 	github.com/metalmatze/signal v0.0.0-20200616171423-be84551ba3ce
 	github.com/observatorium/up v0.0.0-20200603110215-8a20b4e48ac0
 	github.com/oklog/run v1.1.0
-	github.com/prometheus/client_golang v1.11.0
+	github.com/prometheus/client_golang v1.11.1
 	github.com/prometheus/common v0.30.0
 	github.com/prometheus/procfs v0.6.0 // indirect
 	github.com/prometheus/prometheus v1.8.2-0.20200305080338-7164b58945bb
@@ -94,7 +94,7 @@ require (
 	go.uber.org/atomic v1.6.0 // indirect
 	go.uber.org/multierr v1.5.0 // indirect
 	go.uber.org/zap v1.14.1 // indirect
-	golang.org/x/crypto v0.0.0-20220112180741-5e0467b6c7ce // indirect
+	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd // indirect
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a // indirect
 	golang.org/x/text v0.3.6 // indirect
 	google.golang.org/api v0.30.0 // indirect
@@ -111,7 +111,8 @@ require (
 
 replace (
 	// fix CVE-2022-24450
-	github.com/nats-io/nats-server/v2 => github.com/nats-io/nats-server/v2 v2.7.2
+	github.com/nats-io/nats-server/v2 => github.com/nats-io/nats-server/v2 v2.8.2
 	go.etcd.io/etcd => go.etcd.io/etcd v0.5.0-alpha.5.0.20200329194405-dd816f0735f8
+	golang.org/x/text => golang.org/x/text v0.3.7
 	google.golang.org/grpc => google.golang.org/grpc v1.27.0
 )
