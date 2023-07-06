@@ -1,6 +1,4 @@
-FROM golang:1.18-alpine3.15 as builder
-
-RUN apk add --update --no-cache ca-certificates tzdata git make bash && update-ca-certificates
+FROM registry.ci.openshift.org/stolostron/builder:go1.18-linux AS builder
 
 ADD . /opt
 WORKDIR /opt
@@ -9,7 +7,6 @@ RUN git update-index --refresh; make observatorium
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest as runner
 
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /opt/observatorium /bin/observatorium
 
 ARG BUILD_DATE
