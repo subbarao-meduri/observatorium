@@ -66,18 +66,18 @@ func remoteWrite(write *url.URL, endpoints []Endpoint, logger log.Logger) http.H
 				client = &http.Client{
 					Transport: &http.Transport{
 						DisableKeepAlives: true,
-						IdleConnTimeout:   30 * time.Second,
+						IdleConnTimeout:   300 * time.Second,
 						DialContext: (&net.Dialer{
-							Timeout:   30 * time.Second,
-							KeepAlive: 30 * time.Second,
+							Timeout:   300 * time.Second,
+							KeepAlive: 300 * time.Second,
 						}).DialContext,
 					},
 				}
 			} else {
 				client, err = promconfig.NewClientFromConfig(*endpoint.ClientConfig, endpoint.Name,
 					promconfig.WithDialContextFunc((&net.Dialer{
-						Timeout:   30 * time.Second,
-						KeepAlive: 30 * time.Second,
+						Timeout:   300 * time.Second,
+						KeepAlive: 300 * time.Second,
 					}).DialContext))
 				if err != nil {
 					//level.Error(rlogger).Log("msg", "failed to create a new HTTP client", "err", err)
